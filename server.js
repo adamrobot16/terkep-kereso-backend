@@ -14,7 +14,7 @@ app.get('/scrape', async (req, res) => {
 
     try {
         // Cél weboldal letöltése
-        const response = await fetch(targetUrl);
+        const response = await fetch('https://terkep-kereso-backend.onrender.com/scrape?url=${encodeURIComponent(url)}');
         const html = await response.text();
 
         // HTML betöltése és elemzése a Cheerio segítségével
