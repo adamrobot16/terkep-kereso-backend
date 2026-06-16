@@ -23,9 +23,24 @@ app.get('/scrape', async (req, res) => {
 
         // Összes <img> címke megkeresése
         $('img').each((index, element) => {
-            const src = $(element).attr('src');
-            if (src) {
-                images.push(src);
+            // 1. Alapértelmezésként megnézzük a sima img src-t (ez a kiskép)
+            let finalUrl = $(element).attr('src');
+
+            // 2. Megkeressük, hogy a kép egy <a> (link) címkén belül van-e
+            const parentLink = $(element).closest('a');
+
+            if (parentLink.length > 0) {
+                // Ha van data-fancybox attribútuma, vagy az href .jpg/.png-re végződik
+                const href = parentLink.attr('href');
+                if (href && (parentLink.attr('data-fancybox') === 'images' || href.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
+                    // Akkor a nagy képet (a link célját) mentjük el!
+                    finalUrl = href;
+                }
+            }
+
+            // 3. Ha találtunk valamilyen URL-t, betesszük a listába
+            if (finalUrl) {
+                images.push(finalUrl);
             }
         });
 
