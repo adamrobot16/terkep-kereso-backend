@@ -13,48 +13,63 @@ app.get('/scrape', async (req, res) => {
     }
 
     try {
-        // 1. Álcázzuk magunkat igazi Chrome böngészőnek! (Bot-védelem megkerülése)
+        console.log(`\n--- ÚJ KERESÉS: ${targetUrl} ---`);
+        
+        // Extra fejlécek (pl. Referer), hogy még hitelesebb böngészőnek tűnjünk
         const response = await fetch(targetUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
+                'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://www.google.com/' 
             }
         });
 
-        // Ha a szerver mégis letiltana, azt most már látni fogjuk
         if (!response.ok) {
-            return res.status(response.status).json({ error: `A céloldal elutasította a kérést (Hiba: ${response.status})` });
+            console.log(`Hiba: A szerver ${response.status} kóddal válaszolt.`);
+            return res.status(response.status).json({ error: `Szerver hiba: ${response.status}` });
         }
 
         const html = await response.text();
         const $ = cheerio.load(html);
-        const images = [];
+        
+        // Set-et használunk, hogy kiszűrjük a véletlenül duplikált linkeket
+        const images = new Set(); 
 
-        // 2. Az okosított keresés: Kiskép helyett a nagy képet vesszük!
-        $('img').each((index, element) => {
-            let finalUrl = $(element).attr('src');
-            
-            // Megnézzük a "szülőt" (a linket, amibe be van ágyazva)
-            const parentLink = $(element).closest('a');
-
-            if (parentLink.length > 0) {
-                const href = parentLink.attr('href');
-                // Ha a link egy képnézegető (fancybox) vagy maga a link egy képfájlra mutat
-                if (href && (parentLink.attr('data-fancybox') === 'images' || href.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
-                    finalUrl = href; // Akkor felülírjuk a kisképet a nagy linkjével!
-                }
-            }
-
-            // Ha találtunk valamit, és az tényleg egy link, elmentjük
-            if (finalUrl) {
-                images.push(finalUrl);
+        // 1. Elsődleges célpont: Keresés direktben a data-fancybox attribútumra!
+        $('a[data-fancybox="images"]').each((index, element) => {
+            const href = $(element).attr('href');
+            if (href) {
+                images.add(href);
             }
         });
 
-        res.json({ images: images });
+        // 2. Biztonsági háló: ha nincs fancybox, megpróbáljuk a sima képeket (mint a legelső kódnál)
+        if (images.size === 0) {
+            $('img').each((index, element) => {
+                const src = $(element).attr('src');
+                if (src) {
+                    images.add(src);
+                }
+            });
+        }
+
+        // Átalakítjuk a Set-et sima tömbbé
+        const finalImages = Array.from(images);
+
+        // DETEKTÍV MÓD: Mit lát valójában a szerver?
+        if (finalImages.length === 0) {
+            const pageTitle = $('title').text().trim();
+            console.log(`[FIGYELMEZTETÉS] Nulla képet találtunk!`);
+            console.log(`[DETEKTÍV] A letöltött oldal címe ez volt: "${pageTitle}"`);
+        } else {
+            console.log(`[SIKER] Talált képek száma: ${finalImages.length}`);
+        }
+
+        res.json({ images: finalImages });
 
     } catch (error) {
+        console.error("Hálózati hiba:", error.message);
         res.status(500).json({ error: 'Hálózati hiba történt a weboldal letöltésekor.' });
     }
 });
